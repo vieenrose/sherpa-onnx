@@ -51,6 +51,9 @@ elseif(v STREQUAL "1.18.1")
   set(onnxruntime_URL  "https://github.com/csukuangfj/onnxruntime-libs/releases/download/v1.18.1/onnxruntime-linux-aarch64-gpu-cuda12-1.18.1.tar.bz2")
   set(onnxruntime_URL2 "https://hf-mirror.com/csukuangfj/onnxruntime-libs/resolve/main/onnxruntime-linux-aarch64-gpu-cuda12-1.18.1.tar.bz2")
   set(onnxruntime_HASH "SHA256=1e91064ec13a6fabb6b670da8a2da4f369c1dbd50a5be77a879b2473e7afc0a6")
+elseif(v STREQUAL "1.23.1")
+  # local custom from-source ORT for CUDA 13 / sm_121 (found via possible_file_locations below)
+  set(onnxruntime_HASH "")
 else()
   message(FATAL_ERROR "Unuspported onnxruntime version ${v} for Linux aarch64")
 endif()
@@ -92,7 +95,7 @@ FetchContent_Declare(onnxruntime
   URL
     ${onnxruntime_URL}
     ${onnxruntime_URL2}
-  URL_HASH          ${onnxruntime_HASH}
+  # URL_HASH disabled for local custom ORT 1.23.1 CUDA-13 build
 )
 
 FetchContent_GetProperties(onnxruntime)

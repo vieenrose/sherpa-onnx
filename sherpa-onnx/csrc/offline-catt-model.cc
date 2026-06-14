@@ -77,7 +77,11 @@ class OfflineCATTModel::Impl {
     return std::move(ans[0]);
   }
 
-  OrtAllocator *Allocator() const { return allocator_; }
+  // NOTE(cudnn-free/ORT-1.11): drop `const` to match the other model files —
+  // ORT 1.11's AllocatorWithDefaultOptions only exposes a *non-const*
+  // `operator OrtAllocator*()`, so a const method here fails to convert
+  // (the non-const overload was added in ORT >= 1.12).
+  OrtAllocator *Allocator() { return allocator_; }
 
  private:
   void InitEncoder() {

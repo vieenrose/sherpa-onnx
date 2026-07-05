@@ -39,6 +39,7 @@
 
 #if SHERPA_ONNX_ENABLE_TTS == 1
 #include "sherpa-onnx/python/csrc/offline-tts.h"
+#include "sherpa-onnx/python/csrc/offline-tts-mbistft-stream-model.h"
 #include "sherpa-onnx/python/csrc/sentence-piece-tokenizer.h"
 #endif
 
@@ -83,6 +84,7 @@ PYBIND11_MODULE(_sherpa_onnx, m) {
 
 #if SHERPA_ONNX_ENABLE_TTS == 1
   PybindOfflineTts(&m);
+  PybindOfflineTtsMbistftStreamModel(&m);
   PybindSentencePieceTokenizer(&m);
 #else
   /* Define "empty" TTS symbols */

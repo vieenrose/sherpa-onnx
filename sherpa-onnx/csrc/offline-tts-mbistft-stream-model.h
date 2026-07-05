@@ -17,14 +17,19 @@
 #include <vector>
 
 #include "onnxruntime_cxx_api.h"  // NOLINT
-#include "sherpa-onnx/csrc/offline-tts-model-config.h"
 
 namespace sherpa_onnx {
 
 class OfflineTtsMbistftStreamModel {
  public:
   ~OfflineTtsMbistftStreamModel();
-  explicit OfflineTtsMbistftStreamModel(const OfflineTtsModelConfig &config);
+  // Self-contained: takes the two ONNX paths directly (text->ids frontend runs
+  // upstream, e.g. in Python), so no OfflineTtsModelConfig/dispatch wiring is
+  // required to use this as a streaming backend.
+  OfflineTtsMbistftStreamModel(const std::string &enc_path,
+                               const std::string &dec_path,
+                               int32_t num_threads = 2,
+                               const std::string &provider = "cpu");
 
   // Callback: (samples, n, progress) -> keep going? Mirrors GeneratedAudioCallback.
   using Callback = std::function<bool(const float *, int32_t, float)>;

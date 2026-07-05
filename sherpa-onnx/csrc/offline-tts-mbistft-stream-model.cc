@@ -13,23 +13,29 @@
 #include "sherpa-onnx/csrc/macros.h"
 #include "sherpa-onnx/csrc/onnx-utils.h"
 #include "sherpa-onnx/csrc/ort-env.h"
-#include "sherpa-onnx/csrc/session.h"
+#include "sherpa-onnx/csrc/text-utils.h"
 
 namespace sherpa_onnx {
 
+static Ort::SessionOptions MakeSessOpts(int32_t num_threads) {
+  Ort::SessionOptions o;
+  o.SetIntraOpNumThreads(num_threads);
+  o.SetInterOpNumThreads(1);
+  o.SetGraphOptimizationLevel(ORT_ENABLE_ALL);
+  return o;
+}
+
 class OfflineTtsMbistftStreamModel::Impl {
  public:
-  explicit Impl(const OfflineTtsModelConfig &config)
-      : config_(config),
-        env_(CreateOrtEnv()),
-        sess_opts_(GetSessionOptions(config)),
+  Impl(const std::string &enc_path, const std::string &dec_path,
+       int32_t num_threads, const std::string & /*provider*/)
+      : env_(CreateOrtEnv()),
+        sess_opts_(MakeSessOpts(num_threads)),
         allocator_{} {
-    // config_.mbistft.enc / .dec — add OfflineTtsMbistftStreamModelConfig
-    // (see STREAMING_INTEGRATION.md). enc: text->z ; dec: z-chunk->wav.
     enc_ = std::make_unique<Ort::Session>(
-        env_, SHERPA_ONNX_TO_ORT_PATH(config.mbistft.enc), sess_opts_);
+        env_, SHERPA_ONNX_TO_ORT_PATH(enc_path), sess_opts_);
     dec_ = std::make_unique<Ort::Session>(
-        env_, SHERPA_ONNX_TO_ORT_PATH(config.mbistft.dec), sess_opts_);
+        env_, SHERPA_ONNX_TO_ORT_PATH(dec_path), sess_opts_);
     GetInputNames(enc_.get(), &enc_in_, &enc_in_ptr_);
     GetOutputNames(enc_.get(), &enc_out_, &enc_out_ptr_);
     GetInputNames(dec_.get(), &dec_in_, &dec_in_ptr_);
@@ -103,7 +109,6 @@ class OfflineTtsMbistftStreamModel::Impl {
   }
 
  private:
-  OfflineTtsModelConfig config_;
   Ort::Env env_;
   Ort::SessionOptions sess_opts_;
   Ort::AllocatorWithDefaultOptions allocator_;
@@ -113,8 +118,9 @@ class OfflineTtsMbistftStreamModel::Impl {
 };
 
 OfflineTtsMbistftStreamModel::OfflineTtsMbistftStreamModel(
-    const OfflineTtsModelConfig &config)
-    : impl_(std::make_unique<Impl>(config)) {}
+    const std::string &enc_path, const std::string &dec_path,
+    int32_t num_threads, const std::string &provider)
+    : impl_(std::make_unique<Impl>(enc_path, dec_path, num_threads, provider)) {}
 
 OfflineTtsMbistftStreamModel::~OfflineTtsMbistftStreamModel() = default;
 

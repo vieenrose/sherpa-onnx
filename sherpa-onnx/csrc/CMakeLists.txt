@@ -303,6 +303,7 @@ if(SHERPA_ONNX_ENABLE_TTS)
     offline-tts-supertonic-model.cc
     offline-tts-supertonic-unicode-processor.cc
     offline-tts-vits-model-config.cc
+    offline-tts-mbistft-stream-model.cc
     offline-tts-vits-model.cc
     offline-tts-zipvoice-model-config.cc
     offline-tts-zipvoice-model.cc

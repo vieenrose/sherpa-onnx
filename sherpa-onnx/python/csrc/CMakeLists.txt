@@ -83,6 +83,7 @@ if(SHERPA_ONNX_ENABLE_TTS)
     offline-tts-model-config.cc
     offline-tts-pocket-model-config.cc
     offline-tts-supertonic-model-config.cc
+    offline-tts-mbistft-stream-model.cc
     offline-tts-vits-model-config.cc
     offline-tts-zipvoice-model-config.cc
     offline-tts.cc

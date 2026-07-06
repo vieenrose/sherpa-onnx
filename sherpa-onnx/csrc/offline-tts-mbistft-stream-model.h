@@ -26,10 +26,13 @@ class OfflineTtsMbistftStreamModel {
   // Self-contained: takes the two ONNX paths directly (text->ids frontend runs
   // upstream, e.g. in Python), so no OfflineTtsModelConfig/dispatch wiring is
   // required to use this as a streaming backend.
+  // right_lookahead: vocoder future-frame context per chunk. Causal vocoder = 4;
+  // NON-causal (clean v2) vocoder needs 16 for bit-exact chunked output.
   OfflineTtsMbistftStreamModel(const std::string &enc_path,
                                const std::string &dec_path,
                                int32_t num_threads = 2,
-                               const std::string &provider = "cpu");
+                               const std::string &provider = "cpu",
+                               int32_t right_lookahead = 16);
 
   // Callback: (samples, n, progress) -> keep going? Mirrors GeneratedAudioCallback.
   using Callback = std::function<bool(const float *, int32_t, float)>;
@@ -47,7 +50,6 @@ class OfflineTtsMbistftStreamModel {
   // streaming params (validated on the trained model)
   static constexpr int32_t kChunk = 24;
   static constexpr int32_t kLeft = 64;
-  static constexpr int32_t kRight = 4;
   static constexpr int32_t kHop = 256;  // samples per frame
   static constexpr int32_t kChan = 192;
 

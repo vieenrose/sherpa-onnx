@@ -28,9 +28,10 @@ static Ort::SessionOptions MakeSessOpts(int32_t num_threads) {
 class OfflineTtsMbistftStreamModel::Impl {
  public:
   Impl(const std::string &enc_path, const std::string &dec_path,
-       int32_t num_threads, const std::string & /*provider*/)
+       int32_t num_threads, const std::string & /*provider*/, int32_t right)
       : env_(CreateOrtEnv()),
         sess_opts_(MakeSessOpts(num_threads)),
+        right_(right),
         allocator_{} {
     enc_ = std::make_unique<Ort::Session>(
         env_, SHERPA_ONNX_TO_ORT_PATH(enc_path), sess_opts_);
@@ -83,7 +84,7 @@ class OfflineTtsMbistftStreamModel::Impl {
     for (int32_t a = 0; a < F; a += kChunk) {
       int32_t b = std::min(a + kChunk, F);
       int32_t s0 = std::max(0, a - kLeft);
-      int32_t e = std::min(F, b + kRight);
+      int32_t e = std::min(F, b + right_);
       int32_t w = e - s0;
       // gather z[:, :, s0:e] -> [1, C, w] (z is row-major [C, F])
       slice.resize(static_cast<size_t>(kChan) * w);
@@ -111,6 +112,7 @@ class OfflineTtsMbistftStreamModel::Impl {
  private:
   Ort::Env env_;
   Ort::SessionOptions sess_opts_;
+  int32_t right_ = 16;
   Ort::AllocatorWithDefaultOptions allocator_;
   std::unique_ptr<Ort::Session> enc_, dec_;
   std::vector<std::string> enc_in_, enc_out_, dec_in_, dec_out_;
@@ -119,8 +121,8 @@ class OfflineTtsMbistftStreamModel::Impl {
 
 OfflineTtsMbistftStreamModel::OfflineTtsMbistftStreamModel(
     const std::string &enc_path, const std::string &dec_path,
-    int32_t num_threads, const std::string &provider)
-    : impl_(std::make_unique<Impl>(enc_path, dec_path, num_threads, provider)) {}
+    int32_t num_threads, const std::string &provider, int32_t right_lookahead)
+    : impl_(std::make_unique<Impl>(enc_path, dec_path, num_threads, provider, right_lookahead)) {}
 
 OfflineTtsMbistftStreamModel::~OfflineTtsMbistftStreamModel() = default;
 

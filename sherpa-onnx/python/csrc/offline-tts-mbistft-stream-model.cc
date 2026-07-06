@@ -15,9 +15,9 @@ void PybindOfflineTtsMbistftStreamModel(py::module *m) {
   using PyClass = OfflineTtsMbistftStreamModel;
   py::class_<PyClass>(*m, "OfflineTtsMbistftStreamModel")
       .def(py::init<const std::string &, const std::string &, int32_t,
-                    const std::string &>(),
+                    const std::string &, int32_t>(),
            py::arg("enc"), py::arg("dec"), py::arg("num_threads") = 2,
-           py::arg("provider") = "cpu")
+           py::arg("provider") = "cpu", py::arg("right_lookahead") = 16)
       .def_property_readonly("sample_rate", &PyClass::SampleRate)
       // Generate(x, tone, lang, noise_scale, length_scale, callback):
       // callback(samples: List[float], progress: float) -> bool (keep going).

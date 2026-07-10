@@ -6,6 +6,7 @@
 
 #include <cstdlib>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace sherpa_onnx {

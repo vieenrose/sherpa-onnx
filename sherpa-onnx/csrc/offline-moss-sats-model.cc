@@ -24,7 +24,7 @@
 #include "rawfile/raw_file_manager.h"
 #endif
 
-#include "onnxruntime_cxx_api.h"
+#include "onnxruntime_cxx_api.h"  // NOLINT
 #include "sherpa-onnx/csrc/file-utils.h"
 #include "sherpa-onnx/csrc/macros.h"
 #include "sherpa-onnx/csrc/onnx-utils.h"
@@ -257,7 +257,8 @@ class OfflineMossSatsModel::Impl {
     }
     num_layers_ = static_cast<int32_t>((num_dec_outputs - 1) / 2);
 
-    int32_t expected_inputs = 3 + 2 * num_layers_;  // MOSS export has no attention_mask
+    // MOSS export has no attention_mask input
+    int32_t expected_inputs = 3 + 2 * num_layers_;
     int32_t actual_inputs = static_cast<int32_t>(decoder_input_names_.size());
     if (actual_inputs != expected_inputs) {
       SHERPA_ONNX_LOGE(

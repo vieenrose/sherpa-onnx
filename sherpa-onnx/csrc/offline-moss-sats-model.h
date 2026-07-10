@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "onnxruntime_cxx_api.h"  // NOLINT

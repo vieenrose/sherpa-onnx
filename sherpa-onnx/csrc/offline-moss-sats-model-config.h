@@ -33,17 +33,22 @@ struct OfflineMossSatsModelConfig {
   // Maximum number of new tokens to generate per window.
   int32_t max_new_tokens = 2048;
 
+  // Fixed KV-cache length fallback when the decoder's past_key dim1 is
+  // dynamic (normally read from the graph; our export bakes 8192).
+  int32_t max_total_len = 8192;
+
   OfflineMossSatsModelConfig() = default;
   OfflineMossSatsModelConfig(const std::string &encoder,
                              const std::string &embedding,
                              const std::string &decoder,
                              const std::string &tokenizer_dir,
-                             int32_t max_new_tokens)
+                             int32_t max_new_tokens, int32_t max_total_len)
       : encoder(encoder),
         embedding(embedding),
         decoder(decoder),
         tokenizer_dir(tokenizer_dir),
-        max_new_tokens(max_new_tokens) {}
+        max_new_tokens(max_new_tokens),
+        max_total_len(max_total_len) {}
 
   void Register(ParseOptions *po);
   bool Validate() const;

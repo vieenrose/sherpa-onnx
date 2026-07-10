@@ -27,6 +27,9 @@ void OfflineMossSatsModelConfig::Register(ParseOptions *po) {
                "(tokenizer.json or vocab.json + merges.txt)");
   po->Register("moss-sats-max-new-tokens", &max_new_tokens,
                "Maximum number of tokens to generate per audio window");
+  po->Register("moss-sats-max-total-len", &max_total_len,
+               "KV-cache length fallback if the decoder graph's cache dim is "
+               "dynamic");
 }
 
 bool OfflineMossSatsModelConfig::Validate() const {
@@ -38,7 +41,9 @@ bool OfflineMossSatsModelConfig::Validate() const {
     SHERPA_ONNX_LOGE("MOSS-SATS encoder '%s' does not exist", encoder.c_str());
     return false;
   }
-  if (embedding.empty() || !FileExists(embedding)) {
+  // `embedding` is optional: the sherpa-interface decoder embeds input_ids
+  // in-graph. Kept for potential future split-graph deployments.
+  if (!embedding.empty() && !FileExists(embedding)) {
     SHERPA_ONNX_LOGE("MOSS-SATS embedding '%s' does not exist",
                      embedding.c_str());
     return false;
@@ -66,7 +71,8 @@ std::string OfflineMossSatsModelConfig::ToString() const {
   os << "embedding=\"" << embedding << "\", ";
   os << "decoder=\"" << decoder << "\", ";
   os << "tokenizer_dir=\"" << tokenizer_dir << "\", ";
-  os << "max_new_tokens=" << max_new_tokens << ")";
+  os << "max_new_tokens=" << max_new_tokens << ", ";
+  os << "max_total_len=" << max_total_len << ")";
   return os.str();
 }
 

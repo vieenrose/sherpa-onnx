@@ -277,6 +277,10 @@ list(APPEND sources
   offline-recognizer-funasr-nano-impl.cc
   funasr-nano-tokenizer.cc
   offline-qwen3-asr-model-config.cc
+  offline-moss-sats-model-config.cc
+  offline-moss-sats-model.cc
+  offline-moss-sats-parser.cc
+  offline-recognizer-moss-sats-impl.cc
   offline-qwen3-asr-model.cc
   offline-recognizer-qwen3-asr-impl.cc
   qwen-asr-tokenizer.cc

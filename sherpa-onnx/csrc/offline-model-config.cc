@@ -30,6 +30,7 @@ void OfflineModelConfig::Register(ParseOptions *po) {
   medasr.Register(po);
   fire_red_asr_ctc.Register(po);
   qwen3_asr.Register(po);
+  moss_sats.Register(po);
 
   po->Register("telespeech-ctc", &telespeech_ctc,
                "Path to model.onnx for telespeech ctc");
@@ -184,6 +185,9 @@ bool OfflineModelConfig::Validate() const {
   if (!qwen3_asr.conv_frontend.empty()) {
     return qwen3_asr.Validate();
   }
+  if (!moss_sats.encoder.empty()) {
+    return moss_sats.Validate();
+  }
 
   if (!telespeech_ctc.empty() && !FileExists(telespeech_ctc)) {
     SHERPA_ONNX_LOGE("telespeech_ctc: '%s' does not exist",
@@ -244,6 +248,7 @@ std::string OfflineModelConfig::ToString() const {
   os << "medasr=" << medasr.ToString() << ", ";
   os << "fire_red_asr_ctc=" << fire_red_asr_ctc.ToString() << ", ";
   os << "qwen3_asr=" << qwen3_asr.ToString() << ", ";
+  os << "moss_sats=" << moss_sats.ToString() << ", ";
   os << "telespeech_ctc=\"" << telespeech_ctc << "\", ";
   os << "tokens=\"" << tokens << "\", ";
   os << "num_threads=" << num_threads << ", ";

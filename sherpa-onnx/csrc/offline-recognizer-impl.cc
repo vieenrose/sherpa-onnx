@@ -37,6 +37,7 @@
 #include "sherpa-onnx/csrc/offline-recognizer-moonshine-v2-impl.h"
 #include "sherpa-onnx/csrc/offline-recognizer-paraformer-impl.h"
 #include "sherpa-onnx/csrc/offline-recognizer-paraformer-tpl-impl.h"
+#include "sherpa-onnx/csrc/offline-recognizer-moss-sats-impl.h"
 #include "sherpa-onnx/csrc/offline-recognizer-qwen3-asr-impl.h"
 #include "sherpa-onnx/csrc/offline-recognizer-sense-voice-impl.h"
 #include "sherpa-onnx/csrc/offline-recognizer-sense-voice-tpl-impl.h"
@@ -244,6 +245,10 @@ std::unique_ptr<OfflineRecognizerImpl> OfflineRecognizerImpl::Create(
 
   if (!config.model_config.qwen3_asr.conv_frontend.empty()) {
     return std::make_unique<OfflineRecognizerQwen3ASRImpl>(config);
+  }
+
+  if (!config.model_config.moss_sats.encoder.empty()) {
+    return std::make_unique<OfflineRecognizerMossSatsImpl>(config);
   }
 
   if (!config.model_config.paraformer.model.empty()) {
@@ -649,6 +654,10 @@ std::unique_ptr<OfflineRecognizerImpl> OfflineRecognizerImpl::Create(
 
   if (!config.model_config.qwen3_asr.conv_frontend.empty()) {
     return std::make_unique<OfflineRecognizerQwen3ASRImpl>(mgr, config);
+  }
+
+  if (!config.model_config.moss_sats.encoder.empty()) {
+    return std::make_unique<OfflineRecognizerMossSatsImpl>(mgr, config);
   }
 
   // TODO(fangjun): Refactor it. We only need to use model type for the

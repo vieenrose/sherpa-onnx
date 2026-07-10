@@ -99,9 +99,10 @@ bool OfflineModelConfig::Validate() const {
     }
   }
 
-  // For FunASR-nano and Qwen3-ASR, tokens file is not required (tokenizer is
-  // loaded from directory). Check tokens only for other model types.
-  if (funasr_nano.encoder_adaptor.empty() && qwen3_asr.conv_frontend.empty()) {
+  // For FunASR-nano, Qwen3-ASR, and MOSS-SATS, tokens file is not required
+  // (tokenizer is loaded from directory). Check tokens only for other types.
+  if (funasr_nano.encoder_adaptor.empty() && qwen3_asr.conv_frontend.empty() &&
+      moss_sats.encoder.empty()) {
     if (!FileExists(tokens)) {
       SHERPA_ONNX_LOGE("tokens: '%s' does not exist", tokens.c_str());
       return false;

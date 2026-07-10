@@ -45,12 +45,16 @@ constexpr int32_t kMossSatsChunkSize = 100;
 // Number of mel bins per frame for MOSS-SATS (Whisper-style log-mel). Must
 // match the feature extractor (`WhisperTag` dim), `NormalizeWhisperFeatures`
 // row width, and the last dimension of the conv-frontend ONNX input.
-constexpr int32_t kMossSatsMelDim = 128;
+constexpr int32_t kMossSatsMelDim = 80;  // Whisper-Medium mel bins
 
-// MOSS-SATS hotwords are placed in the system-role segment of the chat template
-constexpr char kMossSatsSystemPromptPrefix[] = "<|im_start|>system\n";
+// MOSS-SATS chat template: fixed system prompt; the transcription instruction
+// (plus optional hotwords) follows the audio inside the user turn.
+constexpr char kMossSatsSystemPromptPrefix[] =
+    "<|im_start|>system\nYou are a helpful assistant.";
 constexpr char kMossSatsSystemPromptSuffix[] =
     "<|im_end|>\n<|im_start|>user\n<|audio_start|>";
+constexpr char kMossSatsInstruction[] =
+    "\xe8\xaf\xb7\xe5\xb0\x86\xe9\x9f\xb3\xe9\xa2\x91\xe8\xbd\xac\xe5\x86\x99\xe4\xb8\xba\xe6\x96\x87\xe6\x9c\xac\xef\xbc\x8c\xe6\xaf\x8f\xe4\xb8\x80\xe6\xae\xb5\xe9\x9c\x80\xe4\xbb\xa5\xe8\xb5\xb7\xe5\xa7\x8b\xe6\x97\xb6\xe9\x97\xb4\xe6\x88\xb3\xe5\x92\x8c\xe8\xaf\xb4\xe8\xaf\x9d\xe4\xba\xba\xe7\xbc\x96\xe5\x8f\xb7\xef\xbc\x88[S01]\xe3\x80\x81[S02]\xe3\x80\x81[S03]\xe2\x80\xa6\xef\xbc\x89\xe5\xbc\x80\xe5\xa4\xb4\xef\xbc\x8c\xe6\xad\xa3\xe6\x96\x87\xe4\xb8\xba\xe5\xaf\xb9\xe5\xba\x94\xe7\x9a\x84\xe8\xaf\xad\xe9\x9f\xb3\xe5\x86\x85\xe5\xae\xb9\xef\xbc\x8c\xe5\xb9\xb6\xe5\x9c\xa8\xe6\xae\xb5\xe6\x9c\xab\xe6\xa0\x87\xe6\xb3\xa8\xe7\xbb\x93\xe6\x9d\x9f\xe6\x97\xb6\xe9\x97\xb4\xe6\x88\xb3\xef\xbc\x8c\xe4\xbb\xa5\xe6\xb8\x85\xe6\x99\xb0\xe6\xa0\x87\xe6\x98\x8e\xe8\xaf\xa5\xe6\xae\xb5\xe8\xaf\xad\xe9\x9f\xb3\xe8\x8c\x83\xe5\x9b\xb4\xe3\x80\x82";
 
 // Format hotwords for the Qwen3 chat template: ASCII comma-separated list
 // (e.g. "foo,bar,baz");
@@ -323,22 +327,19 @@ std::unique_ptr<OfflineStream> OfflineRecognizerMossSatsImpl::CreateStream()
 
 void OfflineRecognizerMossSatsImpl::InitPromptTemplateIds() {
   const std::string audio_pad = "<|audio_pad|>";
-  const std::string user_suffix = "<|audio_end|><|im_end|>\n";
+  const std::string user_suffix = std::string("<|audio_end|>\n") +
+                                  kMossSatsInstruction + "<|im_end|>\n";
   const std::string assistant_text = "<|im_start|>assistant\n";
 
   audio_pad_ids_ = tokenizer_->Encode(audio_pad);
   prompt_ids_after_ = tokenizer_->Encode(user_suffix + assistant_text);
 
   if (audio_pad_ids_.empty()) {
-    SHERPA_ONNX_LOGE("Failed to tokenize <|audio_pad|> for qwen3-asr prompt");
+    SHERPA_ONNX_LOGE("Failed to tokenize <|audio_pad|> for moss-sats prompt");
     SHERPA_ONNX_EXIT(-1);
   }
 
-  asr_text_token_id_ = tokenizer_->GetTokenId("<asr_text>");
-  if (asr_text_token_id_ < 0) {
-    SHERPA_ONNX_LOGE("Failed to locate <asr_text> token id for qwen3-asr");
-    SHERPA_ONNX_EXIT(-1);
-  }
+  asr_text_token_id_ = -1;  // MOSS-SATS has no <asr_text> marker
 }
 
 std::vector<int64_t> OfflineRecognizerMossSatsImpl::BuildSourceIds(
@@ -368,7 +369,6 @@ std::vector<int64_t> OfflineRecognizerMossSatsImpl::BuildSourceIds(
     prompt_ids_after_with_language.insert(prompt_ids_after_with_language.end(),
                                           language_ids.begin(),
                                           language_ids.end());
-    prompt_ids_after_with_language.push_back(asr_text_token_id_);
     ids_after = &prompt_ids_after_with_language;
   }
 
@@ -1054,8 +1054,10 @@ void OfflineRecognizerMossSatsImpl::Decode(OfflineStream *stream) const {
   int32_t F = kMossSatsMelDim;
   int32_t feat_frames = num_frames;
 
-  // MOSS-SATS encoder expects Whisper-style mel: (1, num_mel_bins, T).
-  // Sherpa features are frame-major (T, F) -> transpose.
+  // MOSS-SATS encoder is a Whisper encoder: it processes fixed 30-s windows
+  // (<=3000 mel frames). Chunk the mel, encode each window, and concatenate
+  // the audio embeddings along time (mirrors the Python audio_chunk_mapping).
+  constexpr int32_t kMelChunk = 3000;
   std::vector<float> mel(static_cast<size_t>(F) * feat_frames);
   for (int32_t t = 0; t < feat_frames; ++t) {
     for (int32_t b = 0; b < F; ++b) {
@@ -1063,15 +1065,48 @@ void OfflineRecognizerMossSatsImpl::Decode(OfflineStream *stream) const {
           f[static_cast<size_t>(t) * F + b];
     }
   }
-  std::array<int64_t, 3> mel_shape{1, static_cast<int64_t>(F),
-                                   static_cast<int64_t>(feat_frames)};
-  Ort::Value mel_tensor = Ort::Value::CreateTensor<float>(
-      memory_info, mel.data(), mel.size(), mel_shape.data(), mel_shape.size());
 
-  int32_t expected_audio_token_len =
-      FeatToAudioTokensLen(feat_frames, kMossSatsChunkSize);
+  std::vector<float> embeds;  // concatenated (T_tok, H)
+  int64_t total_tok = 0;
+  int64_t hidden = 0;
+  for (int32_t off = 0; off < feat_frames; off += kMelChunk) {
+    const int32_t n = std::min(kMelChunk, feat_frames - off);
+    if (n < 16) {
+      break;  // ignore a tiny tail (sub-0.2 s)
+    }
+    // The exported encoder has a fixed 30-s positional table: always feed
+    // exactly kMelChunk frames (zero-pad the tail) and keep only the tokens
+    // corresponding to real audio: (n/2)/4.
+    std::vector<float> chunk(static_cast<size_t>(F) * kMelChunk, 0.0f);
+    for (int32_t b = 0; b < F; ++b) {
+      std::memcpy(chunk.data() + static_cast<size_t>(b) * kMelChunk,
+                  mel.data() + static_cast<size_t>(b) * feat_frames + off,
+                  sizeof(float) * n);
+    }
+    std::array<int64_t, 3> mel_shape{1, static_cast<int64_t>(F),
+                                     static_cast<int64_t>(kMelChunk)};
+    Ort::Value mel_tensor = Ort::Value::CreateTensor<float>(
+        memory_info, chunk.data(), chunk.size(), mel_shape.data(),
+        mel_shape.size());
+    Ort::Value part = model_->ForwardEncoder(std::move(mel_tensor));
+    auto shp = part.GetTensorTypeAndShapeInfo().GetShape();  // (1, T', H)
+    const float *pd = part.GetTensorData<float>();
+    hidden = shp[2];
+    const int64_t keep = std::min<int64_t>(shp[1], (n / 2) / 4);
+    embeds.insert(embeds.end(), pd, pd + keep * shp[2]);
+    total_tok += keep;
+  }
+  if (total_tok == 0 || hidden == 0) {
+    OfflineRecognitionResult r0;
+    stream->SetResult(r0);
+    return;
+  }
+  std::array<int64_t, 3> emb_shape{1, total_tok, hidden};
+  Ort::Value audio_features = Ort::Value::CreateTensor<float>(
+      memory_info, embeds.data(), embeds.size(), emb_shape.data(),
+      emb_shape.size());
 
-  Ort::Value audio_features = model_->ForwardEncoder(std::move(mel_tensor));
+  int32_t expected_audio_token_len = static_cast<int32_t>(total_tok);
 
   if (config_.model_config.debug) {
     SHERPA_ONNX_LOGE("moss-sats: feat_frames=%d expected_audio_tokens=%d",

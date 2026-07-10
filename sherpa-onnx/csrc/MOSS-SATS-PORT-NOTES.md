@@ -50,3 +50,24 @@ Upstream already ships the machinery MOSS needs:
    distil-vibevoice runtime/consolidate.py recluster method, validated 0.93).
 6. Build + E2E vs models/moss_onnx + models/moss_ft_zhtw exports; python
    binding; docs.
+
+## Qwen3-ASR decoder ONNX interface (introspected 2026-07-10 from
+## csukuangfj2/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25, cached /tmp/q3ref)
+INPUTS (60): input_ids[B,S] i64; audio_features[B,A,1024] f32;
+  attention_mask[B,S] i64; cache_position[S] i64;
+  cache_key_i/cache_value_i [B, max_total_len, 8, 128] f32  (28 layers)
+OUTPUTS (57): logits[B,S,151936]; key_delta_i/value_delta_i [B,S,8,128] (28)
+KEY FACTS:
+- Audio splice happens INSIDE the graph: input_ids carries audio placeholder
+  tokens; audio_features fed separately; graph scatters them (same
+  masked_scatter pattern as MOSS modeling code, audio_token_id=151671).
+- KV layout [B, max_total_len, kv_heads, head_dim] (seq at dim1, NOT HF's
+  [B,kv,S,hd]); fixed-size cache, per-step deltas out; C++ writes deltas at
+  cache_position (ApplyKvDeltaInplace).
+- GEOMETRY IDENTICAL to MOSS decoder: 28 layers, kv 8, head_dim 128,
+  hidden 1024 (both Qwen3-0.6B). Even audio_features hidden (1024) matches.
+  => scripts/31 export wrapper must implement custom attention over the fixed
+  cache (mask by cache_position) — replicate whatever the qwen3-asr exporter
+  did; compare logits vs stock HF forward for parity. Then C++ side of
+  offline-moss-sats-model can be a near-verbatim copy of offline-qwen3-asr-model
+  minus the conv_frontend (Whisper mel encoder instead).

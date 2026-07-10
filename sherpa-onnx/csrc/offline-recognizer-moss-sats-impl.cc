@@ -28,6 +28,7 @@
 
 #include "onnxruntime_cxx_api.h"
 #include "sherpa-onnx/csrc/macros.h"
+#include "sherpa-onnx/csrc/offline-moss-sats-parser.h"
 #include "sherpa-onnx/csrc/math.h"
 #include "sherpa-onnx/csrc/onnx-utils.h"
 #include "sherpa-onnx/csrc/text-utils.h"
@@ -1053,49 +1054,32 @@ void OfflineRecognizerMossSatsImpl::Decode(OfflineStream *stream) const {
   int32_t F = kMossSatsMelDim;
   int32_t feat_frames = num_frames;
 
-  std::array<int64_t, 3> conv_input_shape{1, static_cast<int64_t>(feat_frames),
-                                          static_cast<int64_t>(F)};
-
-  Ort::Value conv_input = Ort::Value::CreateTensor<float>(
-      memory_info, f.data(), static_cast<size_t>(feat_frames) * F,
-      conv_input_shape.data(), conv_input_shape.size());
-
-  Ort::Value conv_output = model_->ForwardConvFrontend(std::move(conv_input));
-
-  auto conv_shape = conv_output.GetTensorTypeAndShapeInfo().GetShape();
-  if (conv_shape.size() < 3 || conv_shape[1] <= 0) {
-    OfflineRecognitionResult r;
-    r.text = "";
-    stream->SetResult(r);
-    return;
+  // MOSS-SATS encoder expects Whisper-style mel: (1, num_mel_bins, T).
+  // Sherpa features are frame-major (T, F) -> transpose.
+  std::vector<float> mel(static_cast<size_t>(F) * feat_frames);
+  for (int32_t t = 0; t < feat_frames; ++t) {
+    for (int32_t b = 0; b < F; ++b) {
+      mel[static_cast<size_t>(b) * feat_frames + t] =
+          f[static_cast<size_t>(t) * F + b];
+    }
   }
+  std::array<int64_t, 3> mel_shape{1, static_cast<int64_t>(F),
+                                   static_cast<int64_t>(feat_frames)};
+  Ort::Value mel_tensor = Ort::Value::CreateTensor<float>(
+      memory_info, mel.data(), mel.size(), mel_shape.data(), mel_shape.size());
 
-  int32_t conv_num_frames = static_cast<int32_t>(conv_shape[1]);
   int32_t expected_audio_token_len =
       FeatToAudioTokensLen(feat_frames, kMossSatsChunkSize);
 
-  int32_t valid_frames = std::min(expected_audio_token_len, conv_num_frames);
-  auto mask_buf =
-      std::make_unique<bool[]>(static_cast<size_t>(conv_num_frames));
-  std::fill_n(mask_buf.get(), static_cast<size_t>(valid_frames), true);
-
-  std::array<int64_t, 2> tok_mask_shape{1, conv_num_frames};
-  Ort::Value feature_attention_mask = Ort::Value::CreateTensor<bool>(
-      memory_info, mask_buf.get(), static_cast<size_t>(conv_num_frames),
-      tok_mask_shape.data(), tok_mask_shape.size());
-
-  Ort::Value audio_features = model_->ForwardEncoder(
-      std::move(conv_output), std::move(feature_attention_mask));
+  Ort::Value audio_features = model_->ForwardEncoder(std::move(mel_tensor));
 
   if (config_.model_config.debug) {
-    SHERPA_ONNX_LOGE(
-        "qwen3-asr: feat_frames=%d conv_frames=%d expected_audio_tokens=%d "
-        "valid_audio_tokens=%d",
-        feat_frames, conv_num_frames, expected_audio_token_len, valid_frames);
+    SHERPA_ONNX_LOGE("moss-sats: feat_frames=%d expected_audio_tokens=%d",
+                     feat_frames, expected_audio_token_len);
   }
 
-  OfflineRecognitionResult r =
-      GenerateText(std::move(audio_features), valid_frames, stream);
+  OfflineRecognitionResult r = GenerateText(std::move(audio_features),
+                                            expected_audio_token_len, stream);
 
   r.text = ApplyHomophoneReplacer(std::move(r.text));
 

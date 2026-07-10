@@ -22,11 +22,17 @@ void OfflineMossSatsModelConfig::Register(ParseOptions *po) {
   po->Register("moss-sats-decoder", &decoder,
                "Path to the MOSS-SATS LLM decoder onnx with KV cache, e.g., "
                "decoder.onnx");
-  po->Register("moss-sats-tokenizer-dir", &tokenizer_dir,
+  po->Register("moss-sats-tokenizer-dir", &tokenizer,
                "Directory containing the Qwen BPE tokenizer assets "
                "(tokenizer.json or vocab.json + merges.txt)");
   po->Register("moss-sats-max-new-tokens", &max_new_tokens,
                "Maximum number of tokens to generate per audio window");
+  po->Register("moss-sats-hotwords", &hotwords,
+               "Optional comma-separated hotwords injected into the prompt");
+  po->Register("moss-sats-temperature", &temperature,
+               "Sampling temperature; 0 = greedy");
+  po->Register("moss-sats-top-p", &top_p, "Top-p nucleus sampling");
+  po->Register("moss-sats-seed", &seed, "Sampling seed");
   po->Register("moss-sats-max-total-len", &max_total_len,
                "KV-cache length fallback if the decoder graph's cache dim is "
                "dynamic");
@@ -52,7 +58,7 @@ bool OfflineMossSatsModelConfig::Validate() const {
     SHERPA_ONNX_LOGE("MOSS-SATS decoder '%s' does not exist", decoder.c_str());
     return false;
   }
-  if (tokenizer_dir.empty()) {
+  if (tokenizer.empty()) {
     SHERPA_ONNX_LOGE("Please provide --moss-sats-tokenizer-dir");
     return false;
   }
@@ -70,7 +76,7 @@ std::string OfflineMossSatsModelConfig::ToString() const {
   os << "encoder=\"" << encoder << "\", ";
   os << "embedding=\"" << embedding << "\", ";
   os << "decoder=\"" << decoder << "\", ";
-  os << "tokenizer_dir=\"" << tokenizer_dir << "\", ";
+  os << "tokenizer=\"" << tokenizer << "\", ";
   os << "max_new_tokens=" << max_new_tokens << ", ";
   os << "max_total_len=" << max_total_len << ")";
   return os.str();

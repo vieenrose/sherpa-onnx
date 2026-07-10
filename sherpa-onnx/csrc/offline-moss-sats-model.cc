@@ -332,6 +332,7 @@ class OfflineMossSatsModel::Impl {
 
   std::pair<Ort::Value, std::vector<std::pair<Ort::Value, Ort::Value>>>
   ForwardLLM(Ort::Value input_ids, Ort::Value audio_features,
+             Ort::Value attention_mask /*unused: not a graph input*/,
              const Ort::Value &cache_position,
              const std::vector<std::pair<Ort::Value, Ort::Value>> &cache_kv) {
     if (static_cast<int32_t>(cache_kv.size()) != num_layers_) {
@@ -721,11 +722,11 @@ Ort::Value OfflineMossSatsModel::ForwardEncoder(Ort::Value mel) {
 
 std::pair<Ort::Value, std::vector<std::pair<Ort::Value, Ort::Value>>>
 OfflineMossSatsModel::ForwardLLM(
-    Ort::Value input_ids, Ort::Value audio_features,
+    Ort::Value input_ids, Ort::Value audio_features, Ort::Value attention_mask,
     const Ort::Value &cache_position,
     const std::vector<std::pair<Ort::Value, Ort::Value>> &cache_kv) {
   return impl_->ForwardLLM(std::move(input_ids), std::move(audio_features),
-                           cache_position, cache_kv);
+                           std::move(attention_mask), cache_position, cache_kv);
 }
 
 std::vector<std::pair<Ort::Value, Ort::Value>>

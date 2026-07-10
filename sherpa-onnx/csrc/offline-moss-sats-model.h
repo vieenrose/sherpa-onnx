@@ -45,6 +45,7 @@ class OfflineMossSatsModel {
    */
   std::pair<Ort::Value, std::vector<std::pair<Ort::Value, Ort::Value>>>
   ForwardLLM(Ort::Value input_ids, Ort::Value audio_features,
+             Ort::Value attention_mask /*unused: not a graph input*/,
              const Ort::Value &cache_position,
              const std::vector<std::pair<Ort::Value, Ort::Value>> &cache_kv);
 

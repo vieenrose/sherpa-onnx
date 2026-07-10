@@ -66,7 +66,7 @@ KEY FACTS:
   cache_position (ApplyKvDeltaInplace).
 - GEOMETRY IDENTICAL to MOSS decoder: 28 layers, kv 8, head_dim 128,
   hidden 1024 (both Qwen3-0.6B). Even audio_features hidden (1024) matches.
-  => scripts/31 export wrapper must implement custom attention over the fixed
+  => DONE (2026-07-10): scripts/31_export_moss_qwen3style.py in distil repo — parity PASS (prefill 2.9e-5, cached 3.3e-5), ONNX at models/moss_onnx_sherpa/decoder.onnx (fp32 2.0G, int8-quantize before ship). NOTE: attention_mask input pruned by tracer (59 inputs) — C++ copy must drop that input. Encoder graph: reuse models/moss_onnx/encoder.onnx (mel->audio embeds, parity-passed). Next: C++ offline-moss-sats-model copy-adapt. custom attention over the fixed
   cache (mask by cache_position) — replicate whatever the qwen3-asr exporter
   did; compare logits vs stock HF forward for parity. Then C++ side of
   offline-moss-sats-model can be a near-verbatim copy of offline-qwen3-asr-model

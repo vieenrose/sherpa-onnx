@@ -45,6 +45,12 @@ struct OfflineMossSatsModelConfig {
   float top_p = 1.0f;
   int32_t seed = 0;
 
+  // Process audio in windows of this many seconds (<= 0 disables windowing).
+  // Single-pass decoding degenerates into repetition loops beyond ~4-5
+  // minutes of audio; 300 s windows match the validated reference pipeline.
+  // Speaker labels are renumbered to be globally unique across windows.
+  float window_seconds = 300.0f;
+
   OfflineMossSatsModelConfig() = default;
   OfflineMossSatsModelConfig(const std::string &encoder,
                              const std::string &embedding,

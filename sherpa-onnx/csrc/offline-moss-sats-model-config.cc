@@ -36,6 +36,9 @@ void OfflineMossSatsModelConfig::Register(ParseOptions *po) {
   po->Register("moss-sats-max-total-len", &max_total_len,
                "KV-cache length fallback if the decoder graph's cache dim is "
                "dynamic");
+  po->Register("moss-sats-window-seconds", &window_seconds,
+               "Decode audio in windows of this many seconds (<=0 disables "
+               "windowing; single-pass degenerates beyond ~4-5 min)");
 }
 
 bool OfflineMossSatsModelConfig::Validate() const {
@@ -78,6 +81,7 @@ std::string OfflineMossSatsModelConfig::ToString() const {
   os << "decoder=\"" << decoder << "\", ";
   os << "tokenizer=\"" << tokenizer << "\", ";
   os << "max_new_tokens=" << max_new_tokens << ", ";
+  os << "window_seconds=" << window_seconds << ", ";
   os << "max_total_len=" << max_total_len << ")";
   return os.str();
 }

@@ -58,6 +58,13 @@ class OfflineRecognizerMossSatsImpl : public OfflineRecognizerImpl {
 
   void Decode(OfflineStream *stream) const;
 
+  // Encode + generate for one window of frame-major whisper-mel features.
+  // `frames` is modified in place (whisper normalization); `stream` supplies
+  // per-request options (hotwords, sampling) to GenerateText.
+  OfflineRecognitionResult DecodeWindowFrames(float *frames,
+                                              int32_t num_frames,
+                                              OfflineStream *stream) const;
+
   OfflineRecognizerConfig config_;
   std::unique_ptr<OfflineMossSatsModel> model_;
   std::unique_ptr<QwenAsrTokenizer> tokenizer_;

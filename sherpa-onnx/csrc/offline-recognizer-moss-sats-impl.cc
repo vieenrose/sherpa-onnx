@@ -8,12 +8,14 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <limits>
 #include <memory>
 #include <numeric>
 #include <random>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -1036,34 +1038,82 @@ void OfflineRecognizerMossSatsImpl::DecodeStreams(OfflineStream **ss,
 }
 
 void OfflineRecognizerMossSatsImpl::Decode(OfflineStream *stream) const {
+  std::vector<float> f = stream->GetFrames();
+  int32_t num_frames =
+      static_cast<int32_t>(f.size() / static_cast<size_t>(kMossSatsMelDim));
+  if (f.empty() || num_frames < 2 ||
+      static_cast<size_t>(num_frames) * static_cast<size_t>(kMossSatsMelDim) !=
+          f.size()) {
+    OfflineRecognitionResult r;
+    r.text = "";
+    stream->SetResult(r);
+    return;
+  }
+
+  // Whisper mel is 100 frames/s. Decode in windows: one-pass generation
+  // degenerates into repetition loops beyond ~4-5 minutes of audio.
+  const float win_s = config_.model_config.moss_sats.window_seconds;
+  const int32_t window_frames =
+      (win_s > 0) ? std::max(3000, static_cast<int32_t>(win_s * 100.0f))
+                  : num_frames;
+
+  if (num_frames <= window_frames) {
+    OfflineRecognitionResult r =
+        DecodeWindowFrames(f.data(), num_frames, stream);
+    r.text = ApplyHomophoneReplacer(std::move(r.text));
+    stream->SetResult(r);
+    return;
+  }
+
+  // Windowed path: decode each window, offset timestamps, renumber speakers
+  // so labels are globally unique across windows (window-local S01 and a
+  // later window's S01 are NOT assumed to be the same voice).
+  OfflineRecognitionResult agg;
+  std::string text_out;
+  int32_t next_global_spk = 0;
+  for (int32_t woff = 0; woff < num_frames; woff += window_frames) {
+    const int32_t n = std::min(window_frames, num_frames - woff);
+    if (n < 100) {  // sub-second tail
+      break;
+    }
+    OfflineRecognitionResult wr = DecodeWindowFrames(
+        f.data() + static_cast<size_t>(woff) * kMossSatsMelDim, n, stream);
+    const float t_off = woff / 100.0f;
+    auto segments = MossSatsTranscriptParser::Parse(wr.text);
+    std::unordered_map<std::string, std::string> spk_map;
+    for (const auto &seg : segments) {
+      auto it = spk_map.find(seg.speaker);
+      if (it == spk_map.end()) {
+        ++next_global_spk;
+        char buf[16];
+        std::snprintf(buf, sizeof(buf), "S%02d", next_global_spk);
+        it = spk_map.emplace(seg.speaker, buf).first;
+      }
+      const float start = seg.start + t_off;
+      const float end = seg.end + t_off;
+      agg.segment_timestamps.push_back(start);
+      agg.segment_durations.push_back(end - start);
+      agg.segment_texts.push_back(it->second + ": " + seg.text);
+      char ts[64];
+      std::snprintf(ts, sizeof(ts), "[%.2f][%s]", start, it->second.c_str());
+      text_out += ts;
+      text_out += seg.text;
+      std::snprintf(ts, sizeof(ts), "[%.2f]", end);
+      text_out += ts;
+    }
+    agg.tokens.insert(agg.tokens.end(), wr.tokens.begin(), wr.tokens.end());
+  }
+  agg.text = ApplyHomophoneReplacer(std::move(text_out));
+  stream->SetResult(agg);
+}
+
+OfflineRecognitionResult OfflineRecognizerMossSatsImpl::DecodeWindowFrames(
+    float *frames, int32_t num_frames, OfflineStream *stream) const {
   auto memory_info =
       Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeDefault);
 
-  std::vector<float> f = stream->GetFrames();
-  if (f.empty()) {
-    OfflineRecognitionResult r;
-    r.text = "";
-    stream->SetResult(r);
-    return;
-  }
-
-  int32_t num_frames =
-      static_cast<int32_t>(f.size() / static_cast<size_t>(kMossSatsMelDim));
-  if (static_cast<size_t>(num_frames) * static_cast<size_t>(kMossSatsMelDim) !=
-      f.size()) {
-    OfflineRecognitionResult r;
-    r.text = "";
-    stream->SetResult(r);
-    return;
-  }
-  if (num_frames < 2) {
-    OfflineRecognitionResult r;
-    r.text = "";
-    stream->SetResult(r);
-    return;
-  }
-
-  NormalizeWhisperFeatures(f.data(), num_frames, kMossSatsMelDim);
+  float *f = frames;
+  NormalizeWhisperFeatures(f, num_frames, kMossSatsMelDim);
 
   int32_t F = kMossSatsMelDim;
   int32_t feat_frames = num_frames;
@@ -1111,9 +1161,7 @@ void OfflineRecognizerMossSatsImpl::Decode(OfflineStream *stream) const {
     total_tok += keep;
   }
   if (total_tok == 0 || hidden == 0) {
-    OfflineRecognitionResult r0;
-    stream->SetResult(r0);
-    return;
+    return {};
   }
   std::array<int64_t, 3> emb_shape{1, total_tok, hidden};
   Ort::Value audio_features = Ort::Value::CreateTensor<float>(
@@ -1127,12 +1175,8 @@ void OfflineRecognizerMossSatsImpl::Decode(OfflineStream *stream) const {
                      feat_frames, expected_audio_token_len);
   }
 
-  OfflineRecognitionResult r = GenerateText(std::move(audio_features),
-                                            expected_audio_token_len, stream);
-
-  r.text = ApplyHomophoneReplacer(std::move(r.text));
-
-  stream->SetResult(r);
+  return GenerateText(std::move(audio_features), expected_audio_token_len,
+                      stream);
 }
 
 #if __ANDROID_API__ >= 9

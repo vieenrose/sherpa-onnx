@@ -108,7 +108,14 @@ void MossSatsTranscriptParser::FeedByte(char ch,
         token_.clear();
         state_ = State::kReadSpeaker;
       } else if (!IsAsciiSpace(ch)) {
-        Reset();
+        // Lenient: no [Sxx] tag after [start] — inherit the previous
+        // segment's speaker and treat this char as the start of the text.
+        speaker_ = last_speaker_;
+        has_speaker_ = true;
+        text_.clear();
+        text_.push_back(ch);
+        token_.clear();
+        state_ = State::kReadText;
       }
       break;
     }
@@ -116,6 +123,17 @@ void MossSatsTranscriptParser::FeedByte(char ch,
       if (ch == ']') {
         std::string spk;
         if (!ParseSpeaker(token_, &spk)) {
+          // "[1.00][1.00]text..." — the bracket after [start] is another
+          // timestamp, not a speaker tag: re-anchor the segment start on it
+          // (mirrors the lenient reference parser's regex re-scan).
+          float v;
+          if (ParseTimestamp(token_, &v)) {
+            start_ = v;
+            has_start_ = true;
+            token_.clear();
+            state_ = State::kExpectSpeakerOpen;
+            return;
+          }
           Reset();
           return;
         }
@@ -129,6 +147,13 @@ void MossSatsTranscriptParser::FeedByte(char ch,
       if (IsSpeakerChar(ch)) {
         token_.push_back(ch);
         if (token_.size() <= 16) return;
+      }
+      // Digits-so-far + '.' means this is a timestamp, not a speaker tag:
+      // hand the token over to the timestamp reader (re-anchored start).
+      if (IsTimestampChar(ch) && token_.size() <= 32) {
+        token_.push_back(ch);
+        state_ = State::kReadStart;
+        return;
       }
       Reset();
       if (ch == '[') state_ = State::kReadStart;
@@ -215,6 +240,7 @@ void MossSatsTranscriptParser::Emit(std::vector<MossSatsSegment> *segs) {
     seg.end = end_;
     seg.speaker = speaker_;
     seg.text = std::move(text);
+    last_speaker_ = seg.speaker;
     segs->push_back(std::move(seg));
   }
   token_.clear();

@@ -668,6 +668,11 @@ OfflineRecognitionResult OfflineRecognizerMossSatsImpl::GenerateText(
   if (max_new_tokens <= 0) {
     max_new_tokens = qwen3_config.max_new_tokens;
   }
+  // Bound generation by audio length: 12.5 audio tokens/s and text rarely
+  // exceeds ~3 text tokens per audio token even for dense speech. Without
+  // this cap, short tail windows can babble to the configured limit
+  // (observed: an 18-s window looping for 2048 tokens).
+  max_new_tokens = std::min(max_new_tokens, audio_token_len * 3 + 64);
 
   const float temperature =
       stream->GetOptionFloat("temperature", qwen3_config.temperature);

@@ -24,6 +24,10 @@ struct MossSatsSegment {
 
 // Single-pass character state machine; no regex, tolerant of malformed spans
 // (falls back to treating them as text, mirroring the reference parser).
+// LENIENT extension over the reference: on real far-field audio the model
+// sometimes emits [start]text[end] without a [Sxx] tag; such segments inherit
+// the previous segment's speaker (first default "S01") instead of being
+// dropped — matching runtime/lenient_parser.py in the reference pipeline.
 class MossSatsTranscriptParser {
  public:
   explicit MossSatsTranscriptParser(bool strip_text = true,
@@ -77,6 +81,7 @@ class MossSatsTranscriptParser {
   std::string pending_after_end_;
   std::string end_token_;
   std::string speaker_;
+  std::string last_speaker_ = "S01";
   float start_ = -1.0f;
   float end_ = -1.0f;
   bool has_start_ = false;
